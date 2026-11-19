@@ -453,7 +453,7 @@ function MovieSearchApp() {
                   placeholder={t.moviePlaceholder}
               />
               <button className="primary-btn" type="submit">
-                {t.search}
+                {t.search}.
               </button>
             </form>
         )}
