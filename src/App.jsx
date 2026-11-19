@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ThemeProvider, useTheme } from "./ThemeContext";
 import "./App.css";
 
-// 주요 15개국 통화 목록 (이름은 한국어/영어 둘 다)
+// 주요 15개국 통화 목록 (한국 원화 KRW 첫 번째 배치)
 const MAJOR_CURRENCIES = [
   { code: "KRW", name: { ko: "한국 (원)", en: "South Korea (Won)" }, iso: "kr" },
   { code: "USD", name: { ko: "미국 (달러)", en: "United States (Dollar)" }, iso: "us" },
@@ -19,7 +19,6 @@ const MAJOR_CURRENCIES = [
   { code: "THB", name: { ko: "태국 (바트)", en: "Thailand (Baht)" }, iso: "th" },
   { code: "PHP", name: { ko: "필리핀 (페소)", en: "Philippines (Peso)" }, iso: "ph" },
   { code: "TWD", name: { ko: "대만 (달러)", en: "Taiwan (Dollar)" }, iso: "tw" },
-  { code: "MYR", name: { ko: "말레이시아 (링깃)", en: "Malaysia (Ringgit)" }, iso: "my" },
 ];
 
 // 1. 투두리스트 컴포넌트
@@ -109,13 +108,12 @@ function ExchangeRateApp() {
   const [usdAmount, setUsdAmount] = useState(100);
   const [updatedAt, setUpdatedAt] = useState("");
   const [loading, setLoading] = useState(true);
-  const [errorKey, setErrorKey] = useState(""); // "noData" | "network" | ""
+  const [errorKey, setErrorKey] = useState("");
 
   useEffect(() => {
     async function fetchRates() {
       try {
         setLoading(true);
-        // API 키 없이 실시간 달러(USD) 기준 환율 제공
         const res = await fetch("https://open.er-api.com/v6/latest/USD");
         const data = await res.json();
         if (data && data.rates) {
@@ -218,23 +216,176 @@ function ExchangeRateApp() {
   );
 }
 
-// 3. 무비검색앱 컴포넌트
-function MovieSearchApp() {
-  const { t } = useTheme();
+// 3-1. 영화 상세 팝업
+function MovieModal({ movie, onClose, isFav, onToggleFav }) {
+  const { t, lang } = useTheme();
+  const apiLang = lang === "ko" ? "ko-KR" : "en-US";
 
-  const [query, setQuery] = useState("Batman");
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadDetail() {
+      setLoading(true);
+      try {
+        const key = import.meta.env.VITE_TMDB_KEY;
+        const res = await fetch(
+            `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${key}&language=${apiLang}`
+        );
+        const data = await res.json();
+        if (!cancelled) setDetail(data && data.id ? data : null);
+      } catch {
+        if (!cancelled) setDetail(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    loadDetail();
+    return () => {
+      cancelled = true;
+    };
+  }, [movie.id, apiLang]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const data = detail || movie;
+  const posterPath = data.poster_path || movie.poster_path;
+
+  return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+          <button className="modal-close" onClick={onClose} aria-label={t.close}>
+            ✕
+          </button>
+
+          <img
+              className="modal-poster"
+              src={
+                posterPath
+                    ? `https://image.tmdb.org/t/p/w500${posterPath}`
+                    : "https://via.placeholder.com/300x450?text=No+Image"
+              }
+              alt={data.title}
+          />
+
+          <div className="modal-content">
+            <h2 className="modal-title">{data.title}</h2>
+            {detail?.tagline && <p className="modal-tagline">{detail.tagline}</p>}
+
+            <div className="modal-meta">
+            <span>
+              ⭐ {data.vote_average ? data.vote_average.toFixed(1) : t.noInfo}
+            </span>
+              <span>{data.release_date || "-"}</span>
+              {detail?.runtime ? <span>{t.minutes(detail.runtime)}</span> : null}
+            </div>
+
+            {loading && <p className="header-subtitle">{t.detailLoading}</p>}
+
+            {!loading && !detail && (
+                <p style={{ color: "#ef4444" }}>{t.detailError}</p>
+            )}
+
+            {detail?.genres?.length > 0 && (
+                <div className="modal-genres">
+                  {detail.genres.map((g) => (
+                      <span key={g.id} className="genre-chip">
+                  {g.name}
+                </span>
+                  ))}
+                </div>
+            )}
+
+            {detail && (
+                <div className="modal-section">
+                  <h3>{t.overview}</h3>
+                  <p>{detail.overview || t.noOverview}</p>
+                </div>
+            )}
+
+            <button
+                className={`fav-big-btn ${isFav ? "on" : ""}`}
+                onClick={() => onToggleFav(movie)}
+            >
+              {isFav ? `♥ ${t.favRemove}` : `♡ ${t.favAdd}`}
+            </button>
+          </div>
+        </div>
+      </div>
+  );
+}
+
+// 3. 무비검색앱 컴포넌트 (검색한 영화 + ♥ 찜한 영화 바구니 전환)
+function MovieSearchApp() {
+  const { t, lang } = useTheme();
+
+  const [query, setQuery] = useState("");
+  const [searchedKeyword, setSearchedKeyword] = useState("");
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [selectedMovie, setSelectedMovie] = useState(null);
+  const [viewMode, setViewMode] = useState("search"); // 'search' | 'favorites'
+
+  const [favorites, setFavorites] = useState(() => {
+    try {
+      const saved = localStorage.getItem("dashboard-favorites");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("dashboard-favorites", JSON.stringify(favorites));
+  }, [favorites]);
+
+  const isFavorite = (id) => favorites.some((m) => m.id === id);
+
+  const toggleFavorite = (movie) => {
+    if (isFavorite(movie.id)) {
+      setFavorites(favorites.filter((m) => m.id !== movie.id));
+    } else {
+      setFavorites([
+        ...favorites,
+        {
+          id: movie.id,
+          title: movie.title,
+          poster_path: movie.poster_path,
+          vote_average: movie.vote_average,
+          release_date: movie.release_date,
+        },
+      ]);
+    }
+  };
+
+  const apiLang = lang === "ko" ? "ko-KR" : "en-US";
 
   const searchMovies = async (keyword) => {
-    if (!keyword.trim()) return;
+    const trimmed = keyword.trim();
+    if (!trimmed) {
+      setSearchedKeyword("");
+      setMovies([]);
+      return;
+    }
+
+    setViewMode("search");
+    setSearchedKeyword(trimmed);
     setLoading(true);
     try {
-      const res = await fetch(
-          `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(keyword)}`
-      );
+      const key = import.meta.env.VITE_TMDB_KEY;
+      const url = `https://api.themoviedb.org/3/search/movie?api_key=${key}&language=${apiLang}&query=${encodeURIComponent(
+          trimmed
+      )}`;
+      const res = await fetch(url);
       const data = await res.json();
-      setMovies(data);
+      setMovies(data.results || []);
     } catch {
       setMovies([]);
     } finally {
@@ -243,13 +394,18 @@ function MovieSearchApp() {
   };
 
   useEffect(() => {
-    searchMovies("Batman");
-  }, []);
+    if (searchedKeyword) {
+      searchMovies(searchedKeyword);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     searchMovies(query);
   };
+
+  const displayMovies = viewMode === "favorites" ? favorites : movies;
 
   return (
       <div>
@@ -258,43 +414,119 @@ function MovieSearchApp() {
           <span className="header-subtitle">{t.movieHint}</span>
         </div>
 
-        <form className="input-row" onSubmit={handleSubmit}>
-          <input
-              className="input-box"
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t.moviePlaceholder}
-          />
-          <button className="primary-btn" type="submit">
-            {t.search}
+        {/* 검색 결과 / 찜한 영화 바구니 전환 버튼 */}
+        <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+          <button
+              type="button"
+              className="theme-btn"
+              style={
+                viewMode === "search"
+                    ? { backgroundColor: "var(--accent)", color: "#ffffff", borderColor: "var(--accent)" }
+                    : {}
+              }
+              onClick={() => setViewMode("search")}
+          >
+            {t.tabSearch}
           </button>
-        </form>
 
-        {loading && <p className="header-subtitle">{t.searching}</p>}
+          <button
+              type="button"
+              className="theme-btn"
+              style={
+                viewMode === "favorites"
+                    ? { backgroundColor: "#ef4444", color: "#ffffff", borderColor: "#ef4444" }
+                    : {}
+              }
+              onClick={() => setViewMode("favorites")}
+          >
+            {t.tabFavorites(favorites.length)}
+          </button>
+        </div>
 
-        {!loading && (
+        {viewMode === "search" && (
+            <form className="input-row" onSubmit={handleSubmit}>
+              <input
+                  className="input-box"
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t.moviePlaceholder}
+              />
+              <button className="primary-btn" type="submit">
+                {t.search}
+              </button>
+            </form>
+        )}
+
+        {viewMode === "search" && !searchedKeyword && !loading && (
+            <p className="header-subtitle">{t.movieEmptyGuide}</p>
+        )}
+
+        {viewMode === "search" && loading && (
+            <p className="header-subtitle">{t.searching}</p>
+        )}
+
+        {viewMode === "search" && !loading && searchedKeyword && movies.length === 0 && (
+            <p className="header-subtitle">{t.movieNoResult}</p>
+        )}
+
+        {viewMode === "favorites" && favorites.length === 0 && (
+            <p className="header-subtitle">{t.favEmptyGuide}</p>
+        )}
+
+        {!(viewMode === "search" && loading) && displayMovies.length > 0 && (
             <div className="movie-grid">
-              {movies.map(({ show }) => (
-                  <div key={show.id} className="movie-card">
-                    <img
-                        className="movie-poster"
-                        src={
-                            show.image?.medium ||
-                            "https://via.placeholder.com/210x295?text=No+Image"
-                        }
-                        alt={show.name}
-                    />
-                    <div className="movie-info">
-                      <div className="movie-title">{show.name}</div>
-                      <div className="movie-meta">
-                        {t.rating}: ⭐ {show.rating?.average ?? t.noInfo} ·{" "}
-                        {show.premiered?.slice(0, 4) || "-"}
+              {displayMovies.map((movie) => {
+                const fav = isFavorite(movie.id);
+                return (
+                    <div
+                        key={movie.id}
+                        className="movie-card clickable"
+                        onClick={() => setSelectedMovie(movie)}
+                    >
+                      <div className="poster-wrap">
+                        <img
+                            className="movie-poster"
+                            src={
+                              movie.poster_path
+                                  ? `https://image.tmdb.org/t/p/w342${movie.poster_path}`
+                                  : "https://via.placeholder.com/210x295?text=No+Image"
+                            }
+                            alt={movie.title}
+                        />
+                        <button
+                            type="button"
+                            className={`heart-btn ${fav ? "on" : ""}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFavorite(movie);
+                            }}
+                            aria-label={fav ? t.favRemove : t.favAdd}
+                        >
+                          {fav ? "♥" : "♡"}
+                        </button>
+                      </div>
+                      <div className="movie-info">
+                        <div className="movie-title">{movie.title}</div>
+                        <div className="movie-meta">
+                          {t.rating}: ⭐{" "}
+                          {movie.vote_average ? movie.vote_average.toFixed(1) : t.noInfo} ·{" "}
+                          {movie.release_date?.slice(0, 4) || "-"}
+                        </div>
                       </div>
                     </div>
-                  </div>
-              ))}
+                );
+              })}
             </div>
+        )}
+
+        {selectedMovie && (
+            <MovieModal
+                movie={selectedMovie}
+                onClose={() => setSelectedMovie(null)}
+                isFav={isFavorite(selectedMovie.id)}
+                onToggleFav={toggleFavorite}
+            />
         )}
       </div>
   );
@@ -303,11 +535,10 @@ function MovieSearchApp() {
 // 대시보드 본문 (ThemeContext 사용)
 function DashboardContent() {
   const { theme, toggleTheme, toggleLang, t } = useTheme();
-  const [activeTab, setActiveTab] = useState("todo"); // 'todo' | 'exchange' | 'movie'
+  const [activeTab, setActiveTab] = useState("todo");
 
   return (
       <div className="container">
-        {/* 1. 상단 고정 헤더 + 언어/다크모드 버튼 */}
         <header className="header-card">
           <div className="header-text">
             <h1 className="header-title">{t.title}</h1>
@@ -324,7 +555,6 @@ function DashboardContent() {
           </div>
         </header>
 
-        {/* 2. 중단 3개 프로젝트 선택 카드 */}
         <section className="card-grid">
           <div
               className={`nav-card ${activeTab === "todo" ? "active" : ""}`}
@@ -354,7 +584,6 @@ function DashboardContent() {
           </div>
         </section>
 
-        {/* 3. 선택된 기능 활성화 영역 */}
         <main className="workspace-card">
           {activeTab === "todo" && <TodoApp />}
           {activeTab === "exchange" && <ExchangeRateApp />}

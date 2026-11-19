@@ -9,7 +9,7 @@ const translations = {
         langBtn: "🌐 English",
 
         todoTitle: "투두리스트",
-        todoDesc: "일 체계적인 일정 관리와 할 일 목록 기록",
+        todoDesc: "체계적인 일정 관리와 할 일 목록 기록",
         exchangeTitle: "실시간 환율",
         exchangeDesc: "주요 15개국 실시간 환율 확인 및 금액 계산",
         movieTitle: "무비검색앱",
@@ -31,13 +31,27 @@ const translations = {
         rateErrorNoData: "환율 정보를 불러오지 못했습니다.",
         rateErrorNetwork: "네트워크 오류로 환율 정보를 가져오지 못했습니다.",
 
-        movieHeading: "🎬 무비 & 시리즈 검색앱",
-        movieHint: "영문 제목으로 검색해 보세요 (예: Avatar, Matrix, Love)",
-        moviePlaceholder: "영화 또는 드라마 제목 입력...",
+        movieHeading: "🎬 무비 검색앱",
+        movieHint: "한글 또는 영문 제목으로 검색하고, 카드를 눌러 상세 정보를 확인하세요",
+        moviePlaceholder: "찾고 싶은 영화 제목을 입력하세요 (예: 인셉션, Interstellar)...",
+        movieEmptyGuide: "검색창에 영화 제목을 입력하고 검색 버튼을 눌러보세요.",
+        movieNoResult: "검색 결과가 없습니다. 다른 제목으로 검색해 보세요.",
         search: "검색",
         searching: "검색 중...",
         rating: "평점",
         noInfo: "정보 없음",
+
+        close: "닫기",
+        overview: "줄거리",
+        noOverview: "등록된 줄거리가 없습니다.",
+        minutes: (m) => `${m}분`,
+        detailLoading: "상세 정보를 불러오는 중...",
+        detailError: "상세 정보를 불러오지 못했습니다.",
+        favAdd: "빨간 하트 찜하기",
+        favRemove: "찜 해제",
+        tabSearch: "🔍 검색 결과",
+        tabFavorites: (n) => `♥ 찜한 영화 (${n})`,
+        favEmptyGuide: "아직 찜한 영화가 없습니다. 영화를 검색해 하트를 눌러보세요!",
     },
     en: {
         title: "My Project Dashboard",
@@ -69,26 +83,38 @@ const translations = {
         rateErrorNoData: "Could not load exchange rate data.",
         rateErrorNetwork: "Could not load exchange rates due to a network error.",
 
-        movieHeading: "🎬 Movie & Series Search",
-        movieHint: "Search by title (e.g. Avatar, Matrix, Love)",
-        moviePlaceholder: "Enter a movie or series title...",
+        movieHeading: "🎬 Movie Search",
+        movieHint: "Search by title, and click a card for details",
+        moviePlaceholder: "Enter a movie title to search (e.g. Inception, Interstellar)...",
+        movieEmptyGuide: "Type a movie title above and click Search.",
+        movieNoResult: "No movies found. Try another title.",
         search: "Search",
         searching: "Searching...",
         rating: "Rating",
         noInfo: "N/A",
+
+        close: "Close",
+        overview: "Overview",
+        noOverview: "No overview available.",
+        minutes: (m) => `${m} min`,
+        detailLoading: "Loading details...",
+        detailError: "Could not load details.",
+        favAdd: "Add red heart",
+        favRemove: "Remove heart",
+        tabSearch: "🔍 Search Results",
+        tabFavorites: (n) => `♥ Favorites (${n})`,
+        favEmptyGuide: "No favorite movies yet. Search and click the heart icon!",
     },
 };
 
 const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
-    // 처음 열릴 때 localStorage에 저장된 테마가 있으면 불러오고, 없으면 'light'
     const [theme, setTheme] = useState(() => {
         const saved = localStorage.getItem("dashboard-theme");
         return saved === "dark" || saved === "light" ? saved : "light";
     });
 
-    // 처음 열릴 때 저장된 언어가 있으면 불러오고, 없으면 'ko'
     const [lang, setLang] = useState(() => {
         const saved = localStorage.getItem("dashboard-lang");
         return saved === "en" || saved === "ko" ? saved : "ko";
